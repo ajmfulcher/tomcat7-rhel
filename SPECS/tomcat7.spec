@@ -4,6 +4,7 @@
 %global minor_version 0
 %global micro_version 42
 %global servletspec 2.5
+%global tcuid 91
 
 # FHS 2.3 compliant tree structure - http://www.pathname.com/fhs/2.3/
 %global basedir %{_var}/lib/%{name}
@@ -13,6 +14,7 @@
 %global cachedir %{_var}/cache/%{name}
 %global tempdir %{cachedir}/temp
 %global workdir %{cachedir}/work
+%global confdir %{_sysconfdir}/%{name}
 
 Name: tomcat7
 Epoch: 0
@@ -23,7 +25,22 @@ Summary: Apache Servlet/JSP Engine, RI for Servlet %{servletspec}/JSP %{jspspec}
 Group: Networking/Daemons
 License: ASL 2.0
 URL: http://tomcat.apache.org/
-Source0:http://www.apache.org/dist/tomcat/tomcat-7/v%{version}/bin/apache-tomcat-%{version}.tar.gz
+Source0: http://www.apache.org/dist/tomcat/tomcat-7/v%{version}/bin/apache-tomcat-%{version}.tar.gz
+Source1: %{name}-%{major_version}.%{minor_version}.conf
+Source2: %{name}-%{major_version}.%{minor_version}.init
+Source3: %{name}-%{major_version}.%{minor_version}.sysconfig
+Source4: %{name}-%{major_version}.%{minor_version}.wrapper
+Source5: %{name}-%{major_version}.%{minor_version}.logrotate
+Source6: %{name}-%{major_version}.%{minor_version}-digest.script
+Source7: %{name}-%{major_version}.%{minor_version}-tool-wrapper.script
+
+Requires: java
+Requires(post): /sbin/chkconfig
+Requires(preun): /sbin/chkconfig
+Requires(post): /lib/lsb/init-functions
+Requires(preun): /lib/lsb/init-functions
+Requires(post): jpackage-utils
+Requires(postun): jpackage-utils
 
 %description
 Tomcat is the servlet container that is used in the official Reference
@@ -53,6 +70,23 @@ to be a collaboration of the best-of-breed developers from around the world.
 %{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{homedir}
 %{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{tempdir}
 %{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{workdir}
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{confdir}
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{appdir}
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{_initrddir}
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{_sysconfdir}/logrotate.d
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{_sbindir}
+%{__install} -d -m 0775 ${RPM_BUILD_ROOT}%{_bindir}
+%{__install} -d -m 0755 ${RPM_BUILD_ROOT}%{homedir}/conf/Catalina/localhost
+
+# add custom scripts
+%{__install} -m 0644 %{SOURCE1} ${RPM_BUILD_ROOT}%{confdir}/%{name}.conf
+%{__install} -m 0755 %{SOURCE2} ${RPM_BUILD_ROOT}%{_initrddir}/%{name}
+%{__install} -m 0644 %{SOURCE3} ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/%{name}
+%{__install} -m 0755 %{SOURCE4} ${RPM_BUILD_ROOT}%{_sbindir}/%{name}
+%{__install} -m 0644 %{SOURCE5} ${RPM_BUILD_ROOT}%{_sysconfdir}/logrotate.d/%{name}
+%{__install} -m 0755 %{SOURCE6} ${RPM_BUILD_ROOT}%{_bindir}/%{name}-digest
+%{__install} -m 0755 %{SOURCE7} ${RPM_BUILD_ROOT}%{_bindir}/%{name}-tool-wrapper
 
 # Clean the re-pointed directories
 %{__rm} -rf ./webapps
@@ -73,7 +107,36 @@ pushd ${RPM_BUILD_ROOT}%{homedir}
     %{__ln_s} %{workdir} work
 popd
 
+%clean
+%{__rm} -rf $RPM_BUILD_ROOT
+
+%pre
+# add the tomcat user and group
+%{_sbindir}/groupadd -g %{tcuid} -r tomcat 2>/dev/null || :
+%{_sbindir}/useradd -c "Apache Tomcat" -u %{tcuid} -g tomcat \
+    -s /sbin/nologin -r -d %{homedir} tomcat 2>/dev/null || :
+
+%post
+# install but don't activate
+/sbin/chkconfig --add %{name}
+
+%preun
+# clean tempdir and workdir on removal or upgrade
+%{__rm} -rf %{workdir}/* %{tempdir}/*
+if [ "$1" = "0" ]; then
+    %{_initrddir}/%{name} stop >/dev/null 2>&1
+    /sbin/chkconfig --del %{name}
+fi
+
 %files
+%attr(0755,tomcat,root) %dir %{logdir}
+%attr(0644,tomcat,tomcat) %{logdir}/catalina.out
+%attr(0775,root,tomcat) %dir %{cachedir}
+%attr(0755,tomcat,root) %dir %{tempdir}
+%attr(0755,tomcat,root) %dir %{workdir}
+%attr(0755,tomcat,root) %dir %{appdir}
+%attr(0775,root,tomcat) %dir %{homedir}/conf/Catalina
+%attr(0775,root,tomcat) %dir %{homedir}/conf/Catalina/localhost
 %{homedir}/lib
 %{homedir}/conf
 %{homedir}/temp
@@ -85,9 +148,12 @@ popd
 %{homedir}/NOTICE
 %{homedir}/RELEASE-NOTES
 %{homedir}/RUNNING.txt
-%{logdir}/catalina.out
-%{tempdir}
-%{workdir}
-%{appdir}
+%{confdir}/%{name}.conf
+%{_initrddir}/%{name}
+%{_sysconfdir}/sysconfig/%{name}
+%{_sbindir}/%{name}
+%{_sysconfdir}/logrotate.d/%{name}
+%{_bindir}/%{name}-digest
+%{_bindir}/%{name}-tool-wrapper
 
 %changelog
