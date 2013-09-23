@@ -34,7 +34,7 @@ Source5: %{name}-%{major_version}.%{minor_version}.logrotate
 Source6: %{name}-%{major_version}.%{minor_version}-digest.script
 Source7: %{name}-%{major_version}.%{minor_version}-tool-wrapper.script
 
-Requires: java
+Requires: jre7
 Requires(post): /sbin/chkconfig
 Requires(preun): /sbin/chkconfig
 Requires(post): /lib/lsb/init-functions
